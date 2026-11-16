@@ -1,0 +1,2 @@
+playwright>=1.47,<2
+xlsxwriter>=3.2,<4
