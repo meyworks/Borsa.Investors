@@ -1,0 +1,40 @@
+name: EGX Daily Investor Collection
+on:
+  schedule:
+    # Both UTC offsets for Cairo summer/winter. Script gates local hour.
+    - cron: '30 14 * * 0-4'
+    - cron: '30 15 * * 0-4'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Collect session after 5:30 PM Cairo
+        env:
+          TZ: Africa/Cairo
+        run: |
+          HOUR=$(TZ=Africa/Cairo date +%H)
+          if [ "$HOUR" != "17" ]; then echo 'Not local 17:30; skip'; exit 0; fi
+          python collector.py --date "$(TZ=Africa/Cairo date +%Y-%m-%d)"
+      - name: Commit updated CSV and Excel (only on success)
+        run: |
+          git config user.name 'egx-collector-bot'
+          git config user.email 'egx-collector-bot@users.noreply.github.com'
+          git add data/investor_flows.csv data/investor_flows.xlsx || true
+          if git diff --cached --quiet; then echo 'No new data'; else git commit -m 'Update daily investor flows' && git push; fi
+      - name: Upload diagnostics on error
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: egx-diagnostics
+          path: diagnostics/
+          if-no-files-found: ignore
